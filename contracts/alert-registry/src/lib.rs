@@ -1029,6 +1029,7 @@ impl AlertRegistry {
 
         // The live hash is deliberately left untouched until confirmation.
         config.pending_webhook_hash = Some(webhook_hash);
+        config.updated_at = env.ledger().timestamp();
 
         Self::persist_alert(&env, config_id, &config);
 
@@ -4943,6 +4944,38 @@ mod tests {
             client.register_alert(&owner, &target, &str(&env, "A"), &hash64(&env), &vec![&env]);
         env.set_auths(&[]);
         client.propose_webhook(&owner, &id, &hash64c(&env, 'p'));
+    }
+
+    #[test]
+    fn test_propose_webhook_updates_updated_at() {
+        let env = Env::default();
+        let contract_id = env.register(AlertRegistry, ());
+        let client = AlertRegistryClient::new(&env, &contract_id);
+        let owner = Address::generate(&env);
+        let target = Address::generate(&env);
+        env.mock_all_auths();
+        let id = client.register_alert(
+            &owner,
+            &target,
+            &str(&env, "A"),
+            &hash64(&env),
+            &vec![&env],
+        );
+
+        let before = client.get_alert(&owner, &id).unwrap();
+        let original_updated_at = before.updated_at;
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 1;
+        });
+
+        client.propose_webhook(&owner, &id, &hash64c(&env, 'p'));
+
+        let after = client.get_alert(&owner, &id).unwrap();
+        assert!(
+            after.updated_at > original_updated_at,
+            "propose_webhook should update updated_at"
+        );
     }
 
     #[test]
